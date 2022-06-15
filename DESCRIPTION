@@ -1,0 +1,24 @@
+Package: snowflakeoauth
+Title: Connect to the 'Snowflake Data Platform' via 'OAuth' Clients
+Version: 0.0.0.9000
+Authors@R: c(
+   person("Aaron", "Jacobs", , "aaron.jacobs@rstudio.com",
+          role = c("aut", "cre")),
+   person("RStudio", role = c("cph", "fnd"))
+   )
+Description: Snowflake database drivers support using 'OAuth' access
+  tokens as a more secure and automated alternative to traditional
+  password-based authentication. 'snowflakeoauth' implements the OAuth
+  flows required to retrieve these tokens and facilitates opening 'DBI'
+  connections to Snowflake with them.
+License: MIT + file LICENSE
+URL: https://github.com/atheriel/snowflakeoauth
+BugReports: https://github.com/atheriel/snowflakeoauth/issues
+Imports:
+  DBI,
+  httr2,
+  odbc,
+  rlang
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.0
