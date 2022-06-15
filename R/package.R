@@ -17,7 +17,7 @@ snowflake_conn <- function(account, driver = "snowflake", ...) {
   if (is.null(token)) {
     stop("no existing token found, did you call snowflake_auth()?")
   }
-  token <- maybe_refresh_token(token$token)
+  token <- maybe_refresh_token(token$client, token$token)
   DBI::dbConnect(
     odbc::odbc(),
     driver = driver, server = account, authenticator = "OAuth",
@@ -102,14 +102,14 @@ normalise_account <- function(account) {
   }
 }
 
-maybe_refresh_token <- function(token) {
+maybe_refresh_token <- function(client, token) {
   if (!token_has_expired(token)) {
     return(token)
   }
-  if (is.null(token$refresh_token) || is.null(token$client)) {
+  if (is.null(token$refresh_token)) {
     stop("token has expired and cannot be automatically refreshed")
   }
-  token <- httr2::oauth_flow_refresh(token$client, token$refresh_token)
+  token <- httr2::oauth_flow_refresh(client, token$refresh_token)
   token
 }
 
