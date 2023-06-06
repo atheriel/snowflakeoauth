@@ -13,16 +13,37 @@
 #' @export
 snowflake_conn <- function(account, driver = "snowflake", ...) {
   account <- normalise_account(account)
-  token <- .tokens[[account]]
-  if (is.null(token)) {
-    stop("no existing token found, did you call snowflake_auth()?")
-  }
-  token <- maybe_refresh_token(token$client, token$token)
+  token <- get_or_refresh_token(account)
   DBI::dbConnect(
     odbc::odbc(),
     driver = driver, server = account, authenticator = "OAuth",
     token = token$access_token, ...
   )
+}
+
+#' Authenticate to Snowflake via Azure Active Directory
+#'
+#' @description When using Posit Workbench and Azure AD for single-sign on, this
+#'   function can be used to retrieve delegated credentials for Snowflake that
+#'   can be used with [snowflake_conn()].
+#'
+#' @param account The Snowflake account identifier, e.g. `myaccount` or
+#'   `myaccount.snowflakecomputing.com`.
+#' @param app_uri The Azure AD application URI for Snowflake, usually in the
+#'   form `api://...`.
+#'
+#' @examples
+#' \dontrun{
+#' snowflake_azure_auth(
+#'   "wda27712.us-east-1", "api://a21cefc2-bb68-4a19-a8b2-fce415ce9da4"
+#' )
+#' }
+#' @export
+snowflake_azure_auth <- function(account, app_uri) {
+  account <- normalise_account(account)
+  token <- azure_token(app_uri)
+  .tokens[[account]] <- list(token = token, client = "azure")
+  invisible(.tokens[[account]])
 }
 
 #' Authenticate to Snowflake via OAuth
@@ -102,20 +123,42 @@ normalise_account <- function(account) {
   }
 }
 
-maybe_refresh_token <- function(client, token) {
-  if (!token_has_expired(token)) {
-    return(token)
+get_or_refresh_token <- function(account) {
+  x <- .tokens[[account]]
+  if (is.null(x)) {
+    stop("no existing token found, did you call snowflake_auth() or snowflake_azure_auth()?")
   }
-  if (is.null(token$refresh_token)) {
+  if (!token_has_expired(x$token)) {
+    return(x$token)
+  }
+  if (x$client == "azure") {
+    x$token <- azure_token(x$token$app_uri)
+    .tokens[[account]] <- x
+    return(x$token)
+  }
+  if (is.null(x$token$refresh_token)) {
     stop("token has expired and cannot be automatically refreshed")
   }
-  token <- httr2::oauth_flow_refresh(client, token$refresh_token)
-  token
+  x$token <- httr2::oauth_flow_refresh(x$client, x$token$refresh_token)
+  .tokens[[account]] <- x
+  x$token
 }
 
 token_has_expired <- function(token) {
   # Allow for the recommended 5 seconds of clock skew.
   !is.null(token$expires_at) && token$expires_at < as.integer(Sys.time()) + 5
+}
+
+azure_token <- function(app_uri) {
+  if (!exists(".rs.api.getDelegatedAzureToken")) {
+    stop("Delegated Azure Credentials are not available in the open-source edition of RStudio.")
+  }
+  getDelegatedAzureToken <- get(".rs.api.getDelegatedAzureToken")
+  raw_token <- getDelegatedAzureToken(app_uri)
+  httr2::oauth_token(
+    access_token = raw_token$access_token, expires_at = raw_token$expires_at,
+    id_token = raw_token$id_token, scope = raw_token$scope, app_uri = app_uri
+  )
 }
 
 # Internal token cache.
